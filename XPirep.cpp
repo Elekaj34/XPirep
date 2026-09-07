@@ -28,7 +28,7 @@
 	#error This is made to be compiled against the XPLM300 SDK
 #endif
 
-#define	XPIREP_VERSION	"1.0.0"
+#define	XPIREP_VERSION	"1.0.2"
 #define	XPIREP_AUTHOR	"Elekaj34"
 
 
@@ -36,14 +36,36 @@ int 				pluginMenuItem;		// The index of our menu item in the Plugins menu
 XPLMMenuID			pluginMenu;			// The menu container we'll append all our menu items to
 static XPLMWindowID	pluginWindow;		// An opaque handle to the window we will create
 
-time_t	timeBlockOut,timeBlockIn,timeTakeOff,timeLand,timeNow;
-float	fuelBlockOut,fuelTakeOff,fuelLand,fuelBlockIn,fuelBlock,fuelFlight,distance;
+time_t	timeNow;
+int		fuelAct,brnState,start,stop;
 float	dmeDist,gndSpd,altAGL;
 char	strBlockOut[20],strTakeOff[20],strLand[20],strBlockIn[20],strNow[20];
 char	strBlockTime[10],strFlightTime[10];
-int		state[4]={0,0,0,0},fuelAct,brnState,start,stop;
-double	timeFlight,timeBlock,timeAct;
 
+struct FlightState
+{
+    int state[4] = {0, 0, 0, 0};
+
+    time_t timeBlockOut = 0;
+    time_t timeBlockIn  = 0;
+    time_t timeTakeOff  = 0;
+    time_t timeLand     = 0;
+
+    float fuelBlockOut = 0.0f;
+    float fuelTakeOff  = 0.0f;
+    float fuelLand     = 0.0f;
+    float fuelBlockIn  = 0.0f;
+
+    float fuelBlock = 0.0f;
+    float fuelFlight = 0.0f;
+    float distance = 0.0f;
+    
+    double timeFlight = 0.0;
+    double timeBlock = 0.0;
+    double timeAct = 0.0;
+};
+
+FlightState flight;
 // Buttons variables
 static float pluginResetBtn_lbrt[4]; 	// left, bottom, right, top
 static float pluginStartBtn_lbrt[4]; 	// left, bottom, right, top
@@ -140,66 +162,64 @@ static float flightLoop(float inElapsedSinceLastCall,float inElapsedTimeSinceLas
 	gndSpd = XPLMGetDataf(XPLMFindDataRef("sim/flightmodel/position/groundspeed"));
 	altAGL = XPLMGetDataf(XPLMFindDataRef("sim/flightmodel/position/y_agl"));
 	dmeDist = XPLMGetDataf(XPLMFindDataRef("sim/cockpit2/radios/indicators/hsi_dme_distance_nm_pilot"));
-	distance = XPLMGetDataf(XPLMFindDataRef("sim/flightmodel/controls/dist"));
-	
-	//lat = XPLMGetDataf(XPLMFindDataRef("sim/flightmodel/position/latitude"));
-	//lng = XPLMGetDataf(XPLMFindDataRef("sim/flightmodel/position/longitude"));
-
-	// Read XPLANE navigation data
-	//navDataIdx=XPLMGetDisplayedFMSEntry();
-	//XPLMGetFMSEntryInfo(navDataIdx,NULL,navDataID,NULL,NULL,NULL,NULL);
+	flight.distance = XPLMGetDataf(XPLMFindDataRef("sim/flightmodel/controls/dist"));
 	
 	// If on ground and any of engines is running and ground speed > 0.3 m/s then
 	// this is the block off event and so set flag and time.
-	if(start && onGnd && !state[0] && brnState && gndSpd>0.5) {
-		time(&timeBlockOut);
-		fuelBlockOut=fuelAct;
+	if(start && onGnd && !flight.state[0] && brnState && gndSpd>0.5) {
+		time(&flight.timeBlockOut);
+		flight.fuelBlockOut=fuelAct;
 		// Convert timestamp to string date
-		timeInfos=gmtime(&timeBlockOut);
+		timeInfos=gmtime(&flight.timeBlockOut);
 		strftime(strBlockOut,sizeof(strBlockOut),"%H:%M",timeInfos);
-		state[0]=true;
+		flight.state[0]=true;
 	}
 	// If altitude AGL > 25 meters and takeoff flag not set then 
 	// this is the takeoff event and so set flag and time.
-	if(state[0] && !state[1] && altAGL>25) {
-		time(&timeTakeOff);
-		fuelTakeOff=fuelAct;
+	if(flight.state[0] && !flight.state[1] && altAGL>25) {
+		time(&flight.timeTakeOff);
+		flight.fuelTakeOff=fuelAct;
 		// Convert timestamp to string date
-		timeInfos=gmtime(&timeTakeOff);
+		timeInfos=gmtime(&flight.timeTakeOff);
 		strftime(strTakeOff,sizeof(strTakeOff),"%H:%M",timeInfos);
-		state[1]=true;
+		flight.state[1]=true;
 	}
 	// If on ground and takeoof flag set and speed < 25kts then
 	// this is the landing event and so set flag and time 
-	if(state[1] &&  !state[2] && onGnd) {
-		time(&timeLand);
-		fuelLand=fuelAct;
+	if(flight.state[1] &&  !flight.state[2] && onGnd) {
+		time(&flight.timeLand);
+		flight.fuelLand=fuelAct;
 		// Convert timestamp to string date
-		timeInfos=gmtime(&timeLand);
+		timeInfos=gmtime(&flight.timeLand);
 		strftime(strLand,sizeof(strLand),"%H:%M",timeInfos);
-		state[2]=true;
+		flight.state[2]=true;
 	}
 	// If on ground and blockout flag set and speed < 0.1 m/s then
 	// this is the block in event and so set flag and time.
-	if(stop || (state[2] && !state[3] && gndSpd<0.5 && !brnState)) {
-		time(&timeBlockIn);
-		fuelBlockIn=fuelAct;
+	if(stop || (flight.state[2] && !flight.state[3] && gndSpd<0.5 && !brnState)) {
+		time(&flight.timeBlockIn);
+		flight.fuelBlockIn=fuelAct;
 		// Convert timestamp to string date
-		timeInfos=gmtime(&timeBlockIn);
+		timeInfos=gmtime(&flight.timeBlockIn);
 		strftime(strBlockIn,sizeof(strBlockIn),"%H:%M",timeInfos);
 		// Calculating fuel consumption 
-		fuelBlock=fuelBlockOut-fuelBlockIn;
-		fuelFlight=fuelTakeOff-fuelLand;
+		flight.fuelBlock=flight.fuelBlockOut-flight.fuelBlockIn;
+		flight.fuelFlight=flight.fuelTakeOff-flight.fuelLand;
 		// Calculating flight time
-		timeBlock=difftime(timeBlockIn,timeBlockOut);
-		timeFlight=difftime(timeLand,timeTakeOff);
+		flight.timeBlock=difftime(flight.timeBlockIn,flight.timeBlockOut);
+		flight.timeFlight=difftime(flight.timeLand,flight.timeTakeOff);
 		// Set BlockIn flag
-		state[3]=true;
+		flight.state[3]=true;
 		
 		// If stop flag is set then  reset it
 		if(stop) stop=false;
 	}
 	return 0.1;		// Recall this function in 0.1 sec
+}
+
+void resetFlightState()
+{
+    flight = FlightState();
 }
 
 void	drawWindow(XPLMWindowID in_window_id, void * in_refcon)
@@ -290,50 +310,50 @@ void	drawWindow(XPLMWindowID in_window_id, void * in_refcon)
 	strftime(strNow,sizeof(strNow),"%F %T",timeInfos);
 	sprintf(str, "Actual time : %s", strNow);
 	XPLMDrawString(col_white, l + 10, t, str, NULL, xplmFont_Proportional);
-	sprintf(str,"Distance : %.0f nm - Speed : %.0f kts",round(distance/1852.0),(gndSpd*1.94384));
+	sprintf(str,"Distance : %.0f nm - Speed : %.0f kts",round(flight.distance/1852.0),(gndSpd*1.94384));
 	XPLMDrawString(col_white, l + 10, t - 35, str, NULL, xplmFont_Basic);
 	sprintf(str,"Version : %s by %s",XPIREP_VERSION,XPIREP_AUTHOR);
 	XPLMDrawString(col_white, l + 10, t - 205, str, NULL, xplmFont_Basic);
 
 	// Display live flight infos only if in the air.
-	if(state[1] && !state[2]) {
-		timeAct=difftime(timeNow,timeTakeOff);
+	if(flight.state[1] && !flight.state[2]) {
+		flight.timeAct=difftime(timeNow,flight.timeTakeOff);
 		sprintf(str,"Flight time %02d:%02d:%02d - Fuel burned : %.0f kg",
-			(int)(timeAct)/3600,((int)(timeAct) % 3600)/60,(int)(timeAct) % 60,
-			fuelBlockOut-fuelAct);
+			(int)(flight.timeAct)/3600,((int)(flight.timeAct) % 3600)/60,(int)(flight.timeAct) % 60,
+			flight.fuelBlockOut-fuelAct);
 		XPLMDrawString(col_white, l + 10, t - 20, str, NULL, xplmFont_Basic);
 	}
 	// Display state data info
 	{
-		sprintf(str,"state : %d %d %d %d - %d",state[0],state[1],state[2],state[3],brnState);
+		sprintf(str,"state : %d %d %d %d - %d",flight.state[0],flight.state[1],flight.state[2],flight.state[3],brnState);
 		//XPLMDrawString(col_white, l + 10, t - 35, str, NULL, xplmFont_Basic);
 	}
 
 	// Display of block and flight info
-	if(state[0]) {
-		sprintf(str,"Block Out : %s - %.0f kg",strBlockOut,fuelBlockOut);
+	if(flight.state[0]) {
+		sprintf(str,"Block Out : %s - %.0f kg",strBlockOut,flight.fuelBlockOut);
 		XPLMDrawString(col_white, l + 10, t - 60, str, NULL, xplmFont_Basic);
 	}
-	if(state[1]) {
-		sprintf(str,"Take Off  : %s - %.0f kg",strTakeOff,fuelTakeOff);
+	if(flight.state[1]) {
+		sprintf(str,"Take Off  : %s - %.0f kg",strTakeOff,flight.fuelTakeOff);
 		XPLMDrawString(col_white, l + 10, t - 75, str, NULL, xplmFont_Basic);
 	}
-	if(state[2]) {
-		sprintf(str,"Landing . : %s - %.0f kg",strLand,fuelLand);
+	if(flight.state[2]) {
+		sprintf(str,"Landing . : %s - %.0f kg",strLand,flight.fuelLand);
 		XPLMDrawString(col_white, l + 10, t - 90, str, NULL, xplmFont_Basic);
 	}
-	if(state[3]) {
-		sprintf(str,"Block In  : %s - %.0f kg",strBlockIn,fuelBlockIn);
+	if(flight.state[3]) {
+		sprintf(str,"Block In  : %s - %.0f kg",strBlockIn,flight.fuelBlockIn);
 		XPLMDrawString(col_white, l + 10, t - 105, str, NULL, xplmFont_Basic);
 
-		sprintf(str,"Block Fuel : %6.0f kg  Flight Fuel : %6.0f kg",fuelBlock,fuelFlight);
+		sprintf(str,"Block Fuel : %6.0f kg  Flight Fuel : %6.0f kg",flight.fuelBlock,flight.fuelFlight);
 		XPLMDrawString(col_white, l + 10, t - 130, str, NULL, xplmFont_Basic);
 		sprintf(str,"Block Time : %02d:%02d:%02d   Flight Time : %02d:%02d:%02d",
-			(int)(timeBlock)/3600,((int)(timeBlock) % 3600)/60,(int)(timeBlock) % 60,
-			(int)(timeFlight)/3600,((int)(timeFlight) % 3600)/60,(int)(timeFlight) % 60);
+			(int)(flight.timeBlock)/3600,((int)(flight.timeBlock) % 3600)/60,(int)(flight.timeBlock) % 60,
+			(int)(flight.timeFlight)/3600,((int)(flight.timeFlight) % 3600)/60,(int)(flight.timeFlight) % 60);
 		sprintf(str,"Block Time : %02d:%02d      Flight Time : %02d:%02d",
-			(int)(timeBlock / 3600),((int)timeBlock % 3600)/60,
-			(int)(timeFlight / 3600),((int)timeFlight % 3600)/60);
+			(int)(flight.timeBlock / 3600),((int)flight.timeBlock % 3600)/60,
+			(int)(flight.timeFlight / 3600),((int)flight.timeFlight % 3600)/60);
 		XPLMDrawString(col_white, l + 10, t - 145, str, NULL, xplmFont_Basic);
 		
 		// Auto display windows at block on (end of flight)
@@ -364,7 +384,7 @@ int	mouseHandler(XPLMWindowID in_window_id, int x, int y, XPLMMouseStatus is_dow
 	{
 		if(coord_in_rect(x, y, pluginResetBtn_lbrt)) // user clicked the reset button
 		{
-			state[0]=0; state[1]=0; state[2]=0; state[3]=0;
+			resetFlightState();
 			XPLMSetDataf(XPLMFindDataRef("sim/flightmodel/controls/dist"),0);
 			start=0;
 		}
