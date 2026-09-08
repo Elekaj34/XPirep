@@ -5,82 +5,151 @@ TARGET		:= XPirep
 SOURCES = \
 	XPirep.cpp
 
-LIBS = 
+LIBS =
 
 INCLUDES = \
 	-I$(SRC_BASE)/SDK/CHeaders/XPLM \
 	-I$(SRC_BASE)/SDK/CHeaders/Widgets \
 	-I$(SRC_BASE)/lvgl
 
+############################################################################
+# Platform definitions
 
-DEFINES = -DXPLM200=1 -DXPLM210=1 -DXPLM300=1 -DXPLM301=1 -DAPL=0 -DIBM=0 -DLIN=1
+LIN_DEFINES = \
+	-DXPLM200=1 \
+	-DXPLM210=1 \
+	-DXPLM300=1 \
+	-DXPLM301=1 \
+	-DAPL=0 \
+	-DIBM=0 \
+	-DLIN=1
+
+WIN_DEFINES = \
+	-DXPLM200=1 \
+	-DXPLM210=1 \
+	-DXPLM300=1 \
+	-DXPLM301=1 \
+	-DAPL=0 \
+	-DIBM=1 \
+	-DLIN=0
 
 ############################################################################
-
 
 VPATH = $(SRC_BASE)
 
 CSOURCES	:= $(filter %.c, $(SOURCES))
 CXXSOURCES	:= $(filter %.cpp, $(SOURCES))
 
-CDEPS64			:= $(patsubst %.c, $(BUILDDIR)/obj64/%.cdep, $(CSOURCES))
-CXXDEPS64		:= $(patsubst %.cpp, $(BUILDDIR)/obj64/%.cppdep, $(CXXSOURCES))
-COBJECTS64		:= $(patsubst %.c, $(BUILDDIR)/obj64/%.o, $(CSOURCES))
-CXXOBJECTS64	:= $(patsubst %.cpp, $(BUILDDIR)/obj64/%.o, $(CXXSOURCES))
-ALL_DEPS64		:= $(sort $(CDEPS64) $(CXXDEPS64))
-ALL_OBJECTS64	:= $(sort $(COBJECTS64) $(CXXOBJECTS64))
+############################################################################
+# Linux
 
-CFLAGS := $(DEFINES) $(INCLUDES) -fPIC -fvisibility=hidden
+LIN_OBJDIR	:= $(BUILDDIR)/obj64/linux
+LIN_BINDIR	:= $(BUILDDIR)/$(TARGET)/64
 
+LIN_COBJECTS	:= $(patsubst %.c,$(LIN_OBJDIR)/%.o,$(CSOURCES))
+LIN_CXXOBJECTS	:= $(patsubst %.cpp,$(LIN_OBJDIR)/%.o,$(CXXSOURCES))
+LIN_OBJECTS	:= $(sort $(LIN_COBJECTS) $(LIN_CXXOBJECTS))
 
-# Phony directive tells make that these are "virtual" targets, even if a file named "clean" exists.
-.PHONY: all clean $(TARGET)
-# Secondary tells make that the .o files are to be kept - they are secondary derivatives, not just
-# temporary build products.
-.SECONDARY: $(ALL_OBJECTS) $(ALL_OBJECTS64) $(ALL_DEPS)
+LIN_CDEPS	:= $(patsubst %.c,$(LIN_OBJDIR)/%.cdep,$(CSOURCES))
+LIN_CXXDEPS	:= $(patsubst %.cpp,$(LIN_OBJDIR)/%.cppdep,$(CXXSOURCES))
+LIN_DEPS	:= $(sort $(LIN_CDEPS) $(LIN_CXXDEPS))
 
+LIN_CFLAGS	:= $(LIN_DEFINES) $(INCLUDES) -fPIC -fvisibility=hidden
 
+############################################################################
+# Windows
 
-# Target rules - these just induce the right .xpl files.
+WIN_OBJDIR	:= $(BUILDDIR)/obj64/windows
+WIN_BINDIR	:= $(BUILDDIR)/$(TARGET)/64
 
-$(TARGET): $(BUILDDIR)/$(TARGET)/64/lin.xpl
-	
+WIN_COBJECTS	:= $(patsubst %.c,$(WIN_OBJDIR)/%.o,$(CSOURCES))
+WIN_CXXOBJECTS	:= $(patsubst %.cpp,$(WIN_OBJDIR)/%.o,$(CXXSOURCES))
+WIN_OBJECTS	:= $(sort $(WIN_COBJECTS) $(WIN_CXXOBJECTS))
 
-$(BUILDDIR)/$(TARGET)/64/lin.xpl: $(ALL_OBJECTS64)
+WIN_CDEPS	:= $(patsubst %.c,$(WIN_OBJDIR)/%.cdep,$(CSOURCES))
+WIN_CXXDEPS	:= $(patsubst %.cpp,$(WIN_OBJDIR)/%.cppdep,$(CXXSOURCES))
+WIN_DEPS	:= $(sort $(WIN_CDEPS) $(WIN_CXXDEPS))
+
+WIN_CFLAGS	:= $(WIN_DEFINES) $(INCLUDES) -fvisibility=hidden
+
+WIN_LIBDIR	:= $(SRC_BASE)/SDK/Libraries/Win
+WIN_LIBS	:= $(WIN_LIBDIR)/XPLM_64.lib \
+		   $(WIN_LIBDIR)/XPWidgets_64.lib \
+		   -lopengl32
+
+############################################################################
+# Phony targets
+
+.PHONY: all clean linux windows $(TARGET)
+
+.SECONDARY: $(LIN_OBJECTS) $(LIN_DEPS) $(WIN_OBJECTS) $(WIN_DEPS)
+
+############################################################################
+# Default target
+
+all: linux windows
+
+$(TARGET): all
+
+############################################################################
+# Linux target
+
+linux: $(LIN_BINDIR)/lin.xpl
+
+$(LIN_BINDIR)/lin.xpl: $(LIN_OBJECTS)
 	@echo Linking $@
 	mkdir -p $(dir $@)
-	gcc -m64 -static-libgcc -shared -Wl,--version-script=exports.txt -o $@ $(ALL_OBJECTS64) $(LIBS)
+	g++ -m64 -static-libgcc -shared \
+		-Wl,--version-script=exports.txt \
+		-o $@ $(LIN_OBJECTS) $(LIBS)
 
-# Compiler rules
+############################################################################
+# Windows target
 
-# What does this do?  It creates a dependency file where the affected
-# files are BOTH the .o itself and the cdep we will output.  The result
-# goes in the cdep.  Thus:
-# - if the .c itself is touched, we remake the .o and the cdep, as expected.
-# - If any header file listed in the cdep turd is changed, rebuild the .o.
-$(BUILDDIR)/obj64/%.o : %.c
+windows: $(WIN_BINDIR)/win.xpl
+
+$(WIN_BINDIR)/win.xpl: $(WIN_OBJECTS)
+	@echo Linking $@
 	mkdir -p $(dir $@)
-	g++ $(CFLAGS) -m64 -c $< -o $@
-	g++ $(CFLAGS) -MM -MT $@ -o $(@:.o=.cdep) $<
+	x86_64-w64-mingw32-g++ -m64 -static-libgcc -static-libstdc++ \
+		-shared \
+		-o $@ $(WIN_OBJECTS) $(WIN_LIBS)
 
-$(BUILDDIR)/obj64/%.o : %.cpp
-	mkdir -p $(dir $@)
-	g++ $(CFLAGS) -m64 -c $< -o $@
-	g++ $(CFLAGS) -MM -MT $@ -o $(@:.o=.cppdep) $<
+############################################################################
+# Linux compiler rules
+
+$(LIN_OBJDIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	gcc $(LIN_CFLAGS) -m64 -c $< -o $@
+	gcc $(LIN_CFLAGS) -MM -MT $@ -o $(@:.o=.cdep) $<
+
+$(LIN_OBJDIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	g++ $(LIN_CFLAGS) -m64 -c $< -o $@
+	g++ $(LIN_CFLAGS) -MM -MT $@ -o $(@:.o=.cppdep) $<
+
+############################################################################
+# Windows compiler rules
+
+$(WIN_OBJDIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	x86_64-w64-mingw32-gcc $(WIN_CFLAGS) -m64 -c $< -o $@
+	x86_64-w64-mingw32-gcc $(WIN_CFLAGS) -MM -MT $@ -o $(@:.o=.cdep) $<
+
+$(WIN_OBJDIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	x86_64-w64-mingw32-g++ $(WIN_CFLAGS) -m64 -c $< -o $@
+	x86_64-w64-mingw32-g++ $(WIN_CFLAGS) -MM -MT $@ -o $(@:.o=.cppdep) $<
+
+############################################################################
+# Clean
 
 clean:
 	@echo Cleaning out everything.
 	rm -rf $(BUILDDIR)
 
-# Include any dependency turds, but don't error out if they don't exist.
-# On the first build, every .c is dirty anyway.  On future builds, if the
-# .c changes, it is rebuilt (as is its dep) so who cares if dependencies
-# are stale.  If the .c is the same but a header has changed, this 
-# declares the header to be changed.  If a primary header includes a 
-# utility header and the primary header is changed, the dependency
-# needs a rebuild because EVERY header is included.  And if the secondary
-# header is changed, the primary header had it before (and is unchanged)
-# so that is in the dependency file too.
--include $(ALL_DEPS64)
+############################################################################
+# Include dependency files
 
-
+-include $(LIN_DEPS)
+-include $(WIN_DEPS)

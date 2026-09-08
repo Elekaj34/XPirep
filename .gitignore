@@ -1,0 +1,9 @@
+# Exclude all object files, dependencies ans temporary files
+build/obj64/
+*.o
+*.cdep
+*.cppdep
+
+# IDE and system files 
+.DS_Store
+.vscode/
