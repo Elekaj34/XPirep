@@ -27,6 +27,8 @@ It detects key flight events (Block Out, Takeoff, Landing, Block In) in real tim
 - **Cross-Platform**:
   - Full native support for **Linux** and **Windows** (64-bit).
 
+**Compatible with X-Plane 11 and X-Plane 12.**
+
 ---
 
 ## Installation

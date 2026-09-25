@@ -37,7 +37,7 @@
 /******************************************************************************
  * CONSTANTS DECLARATIONS
  *****************************************************************************/
-#define	XPIREP_VERSION				"1.1.0"
+#define	XPIREP_VERSION				"1.1.2"
 #define	XPIREP_AUTHOR				"Elekaj34"
 #define XPIREP_CACHE_DIR			"Output/caches/XPirep/"
 #define XPIREP_STATE_FILE			"xpirep.dat"
@@ -96,6 +96,7 @@ int				mouseHandler(XPLMWindowID in_window_id, int x, int y, int is_down, void *
 static float	flightLoop(float inElapsedSinceLastCall,float inElapsedTimeSinceLastFlightLoop,int inCounter,void * inRefcon);    
 static int		coord_in_rect(float x, float y, float * bounds_lbrt)  { return ((x >= bounds_lbrt[0]) && (x < bounds_lbrt[2]) && (y < bounds_lbrt[3]) && (y >= bounds_lbrt[1])); }
 void 			resetFlightState(void);
+void 			deleteCacheFile(void);
 bool			saveFlightState(void);
 bool			loadFlightState(void);
 
@@ -269,7 +270,16 @@ static float flightLoop(float inElapsedSinceLastCall,float inElapsedTimeSinceLas
 		// Set BlockIn flag
 		flight.state[3]=true;
 		saveFlightState();
-		
+
+		// Delete the saved flight state file as we are on blocks.
+		deleteCacheFile();
+
+		// If not visible, auto display windows at block on (end of flight) 
+		if (!XPLMGetWindowIsVisible(pluginWindow)) {
+            XPLMSetWindowIsVisible(pluginWindow, 1);
+            XPLMBringWindowToFront(pluginWindow);
+        }
+
 		// If stop flag is set then  reset it
 		if(stop) stop=false;
 	}
@@ -284,14 +294,26 @@ static float flightLoop(float inElapsedSinceLastCall,float inElapsedTimeSinceLas
  * The flight state is stored in: XPIREP_CACHE_DIR/XPIREP_STATE_FILE
  * Delete the file that contains a binary copy of the FlightState structure.
  *
- * @return true if the state was successfully saved, false otherwise.
  */
 void resetFlightState()
 {
-    flight = FlightState();
+    // Reset the flight states
+	flight = FlightState();
 
 	// Delete the saved flight state file
+	deleteCacheFile();
+}
 
+/**
+ * @brief Deletes the persistent cache file.
+ *
+ * Removes the binary file containing the saved FlightState structure
+ * from the disk to reset the plugin's cached state.
+ *
+ * @note This action is permanent and cannot be undone.
+ */
+void deleteCacheFile()
+{
 	// Gets the path to the X-Plane installation directory.
     // XPLMGetSystemPath() provides a path terminated by the appropriate
     // directory separator for the platform (e.g., / for Linux).
@@ -579,16 +601,11 @@ void	drawWindow(XPLMWindowID in_window_id, void * in_refcon)
 
 		sprintf(str,"Block Fuel : %6.0f kg  Flight Fuel : %6.0f kg",flight.fuelBlock,flight.fuelFlight);
 		XPLMDrawString(col_white, l + 10, t - 130, str, NULL, xplmFont_Basic);
-		sprintf(str,"Block Time : %02d:%02d:%02d   Flight Time : %02d:%02d:%02d",
-			(int)(flight.timeBlock)/3600,((int)(flight.timeBlock) % 3600)/60,(int)(flight.timeBlock) % 60,
-			(int)(flight.timeFlight)/3600,((int)(flight.timeFlight) % 3600)/60,(int)(flight.timeFlight) % 60);
-		sprintf(str,"Block Time : %02d:%02d      Flight Time : %02d:%02d",
+		sprintf(str,"Block Time :  %02d:%02d     Flight Time :  %02d:%02d",
 			(int)(flight.timeBlock / 3600),((int)flight.timeBlock % 3600)/60,
 			(int)(flight.timeFlight / 3600),((int)flight.timeFlight % 3600)/60);
 		XPLMDrawString(col_white, l + 10, t - 145, str, NULL, xplmFont_Basic);
 		
-		// Auto display windows at block on (end of flight)
-		XPLMSetWindowIsVisible(pluginWindow,true);
 		// Auto start back to off at end of flight
 		start=false;
 	}
