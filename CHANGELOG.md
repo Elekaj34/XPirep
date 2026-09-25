@@ -1,12 +1,11 @@
 # Changelog
 
-## [1.0.2] - 2021-09-17
+## [1.0.2] - 2021-09-09
 
-### Modifié
-- Nettoyage du code (suppression code obsolète mis en commentaire)
-- Amélioration du code
+### Modified
+- Code cleanup (removed obsolete commented-out code)
+- Code refactoring
 
 ## [1.0.0] - 2021-08-13
 
-### Ajouté
-- Version initiale de XPirep
+- Initial release (V 1.0.0)
