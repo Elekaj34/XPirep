@@ -37,7 +37,7 @@
 /******************************************************************************
  * CONSTANTS DECLARATIONS
  *****************************************************************************/
-#define	XPIREP_VERSION				"1.1.2"
+#define	XPIREP_VERSION				"1.1.3"
 #define	XPIREP_AUTHOR				"Elekaj34"
 #define XPIREP_CACHE_DIR			"Output/caches/XPirep/"
 #define XPIREP_STATE_FILE			"xpirep.dat"
@@ -479,7 +479,7 @@ bool loadFlightState()
 void	drawWindow(XPLMWindowID in_window_id, void * in_refcon)
 {
 	char	str[128];
-	struct	tm * timeInfos;
+	struct	tm timeInfos;
 	float 	col_white[] = {1.0, 1.0, 1.0};		// red, green, blue
 	float 	col_red[] = {1.0, 0.0, 0.0};		// red, green, blue
 	float 	col_green[] = {0.0, 1.0, 0.0};		// red, green, blue
@@ -560,9 +560,15 @@ void	drawWindow(XPLMWindowID in_window_id, void * in_refcon)
 	 *                            DRAWING PARAMETERS                           *
 	 **************************************************************************/
 	timeNow=time(NULL);
-	timeInfos=gmtime(&timeNow);
-	strftime(strNow,sizeof(strNow),"%F %T",timeInfos);
-	sprintf(str, "Actual time : %s", strNow);
+
+	#if defined(_WIN32)
+		gmtime_s(&timeInfos, &timeNow);
+	#else
+		gmtime_r(&timeNow, &timeInfos);
+	#endif
+	strftime(strNow, sizeof(strNow), "%Y-%m-%d %H:%M:%S", &timeInfos);
+	sprintf(str, "Actual time : %s", strNow);	
+
 	XPLMDrawString(col_white, l + 10, t, str, NULL, xplmFont_Proportional);
 	sprintf(str,"Distance : %.0f nm - Speed : %.0f kts",round(flight.distance/1852.0),(gndSpd*1.94384));
 	XPLMDrawString(col_white, l + 10, t - 35, str, NULL, xplmFont_Basic);

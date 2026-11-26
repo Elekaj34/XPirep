@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.3] - 2026-10-09
+
+### Bug fixes
+
+- Bug fixes : No value for actual time on Windows only.
+
 ## [1.1.2] - 2026-09-18
 
 ### Bug fixes
